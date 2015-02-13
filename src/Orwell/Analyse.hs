@@ -29,31 +29,24 @@ import Data.Time.Exts.Base
 import Data.Time.Exts.Unix
 import Data.Aeson
 
+import Orwell.CommitMetaData
+
+
 -- TODO Report Code in eigenes Modul auslagern
 -- TODO Git-Code in eigenes Modul auslagern
 
-instance ToJSON Commit where
-   toJSON (Commit {..}) = object
-    [ "commitAuthor" .= commitAuthor,
-      "commitHash"   .= commitHash,
-      "commitTimestamp" .= (commitTimestamp * 1000),
-      "commitTestsAdded" .= commitTestsAdded
-    ]
---instance ToJSON CommitStat where
---   toJSON (CommitStat {..}) = object
-
-dumpCommits :: [Commit] -> String -> IO ()
+dumpCommits :: [CommitMetaData] -> String -> IO ()
 dumpCommits commits outDir = do 
   mapM (\c -> BL.writeFile (outDir ++ "/" ++ (T.unpack (commitHash c)) ++ ".json") (encode c)) commits
   return ()
 
-commitInfos :: String -> S.FilePath -> Sh [Commit]
+commitInfos :: String -> S.FilePath -> Sh [CommitMetaData]
 commitInfos period repositoryDir = do
     cd repositoryDir
     commits <- getRelevantCommits $ T.pack period
     mapM extractCommitInfo commits
 
-analyseTestContribution :: [Commit] -> IO ()
+analyseTestContribution :: [CommitMetaData] -> IO ()
 analyseTestContribution infos = do    
     now <- getCurrentUnixDateTime
     let stats = statistics now infos
@@ -198,12 +191,11 @@ grep args = do
 data CommitType = BUGFIX | FEATURE | OTHER
     deriving (Show, Eq)
 
-type CommitAuthor = Text
 
 getRelevantCommits :: Text -> Sh [Text]
 getRelevantCommits backInTime = git ["--no-pager", "log", "--no-merges", "--since=" `append` backInTime, "--format=%h"] 
 
-classify :: Commit -> CommitType
+classify :: CommitMetaData -> CommitType
 classify commit | T.isInfixOf "TEC_" subject = FEATURE
                 | T.isInfixOf "fix" $ T.toLower $ subject = BUGFIX
                 | otherwise = OTHER
@@ -274,12 +266,6 @@ countFileChanges hash = do
     out <- git ["diff", "--numstat", hash `append` "^", hash ] --wo das ^ steht ist wichtig, sonst sind added und deleted vertauscht
     return $ map (parseToFileChange.parseChange) out
 
-data FileChange = FileChange {
-    changeFile :: P.FilePath,
-    changeAdded :: Int,
-    changeDeleted :: Int
-} deriving (Eq, Ord, Show)
-
 readGitLineChange :: B.ByteString -> Int
 readGitLineChange "-" = 0
 readGitLineChange s = read $ B.unpack s
@@ -297,25 +283,14 @@ testFiles = filter ((L.isPrefixOf "src/test").changeFile)
 codeFiles :: [FileChange] -> [FileChange]
 codeFiles = filter (\file -> (L.isSuffixOf ".groovy" (changeFile file)) || (L.isSuffixOf ".java" (changeFile file)))
 
-data Commit = Commit {
-    commitHash :: Text,
-    commitSubject :: Text,
-    commitAuthor :: CommitAuthor,
-    commitTimestamp :: Int, 
-    commitCodeFiles :: [FileChange],
-    commitTestFiles :: [FileChange],
-    commitChanges :: [FileChange],
-    commitTestsAdded :: Int
-} deriving (Eq, Ord, Show)
-
-extractCommitInfo :: Text -> Sh Commit
+extractCommitInfo :: Text -> Sh CommitMetaData
 extractCommitInfo hash = do
     a <- author hash
     s <- subject hash
     t <- authorDate hash
     c <- testsAdded hash 
     changes <- fileChanges hash
-    return $ Commit hash s a (read (T.unpack t)) (codeFiles changes) (testFiles (codeFiles changes)) changes c
+    return $ CommitMetaData hash s a (read (T.unpack t)) (codeFiles changes) (testFiles (codeFiles changes)) changes c
 
 type DevStatMap = M.Map CommitAuthor [CommitStat]
 
@@ -330,17 +305,17 @@ statLastWeek = (IM.lookup 0) . statWeekly
 
 -- TODO accessoren sollten alle mit ct geprefixt werden
 data CommitStat = CommitStat {
-    commit :: Commit,
+    commit :: CommitMetaData,
     linesTestAdded :: Int,
     linesCodeAdded :: Int
 } deriving (Eq, Ord, Show)
 
 emptyStats = Stats IM.empty IM.empty IM.empty
 
-statistics :: UnixDateTime -> [Commit] -> Stats
+statistics :: UnixDateTime -> [CommitMetaData] -> Stats
 statistics now = foldl (accumulateStats now) emptyStats
 
-accumulateStats :: UnixDateTime -> Stats -> Commit -> Stats
+accumulateStats :: UnixDateTime -> Stats -> CommitMetaData -> Stats
 accumulateStats now s commit = s{statWeekly=appendAtIndex wi (statWeekly s) stat author,
                                  statMonthly=appendAtIndex mi (statMonthly s) stat author,
                                  statYearly=appendAtIndex yi (statYearly s) stat author}
@@ -404,16 +379,16 @@ appendStat :: CommitStat -> Maybe [CommitStat] -> Maybe [CommitStat]
 appendStat s Nothing = Just [s]
 appendStat s (Just l) = Just $ insert s l
 
-commitStat :: Commit -> CommitStat
+commitStat :: CommitMetaData -> CommitStat
 commitStat c = CommitStat c (sumTest c) (sumCode c)
 
-sumTest :: Commit -> Int
+sumTest :: CommitMetaData -> Int
 sumTest = sumAdded commitTestFiles
 
-sumCode :: Commit -> Int
+sumCode :: CommitMetaData -> Int
 sumCode = sumAdded commitCodeFiles
 
-sumAdded :: (Commit -> [FileChange]) -> Commit -> Int
+sumAdded :: (CommitMetaData -> [FileChange]) -> CommitMetaData -> Int
 sumAdded g c = foldl (\s change-> s + (changeAdded change)) 0 (g c)
 
 --- 

@@ -3,6 +3,7 @@ where
 
 import Prelude hiding (FilePath)
 import Orwell.Analyse
+import Orwell.Elastic
 import Data.Maybe
 import Shelly hiding (find)
 import Control.Monad
@@ -12,8 +13,8 @@ import Data.List as L
 import Data.Text as T (Text, pack)
 
 data Flag = TestOwner | TestContrib | 
-    DumpCommits {
-        dumpOut :: Maybe String
+    ElasticUrlArg {
+        url :: ElasticServerUrl
     } |
     Period {
         period :: String
@@ -29,8 +30,8 @@ main = shelly $ silently $ do
 
     commits <- commitInfos (optionPeriod opts) (optionRepo opts)
     
-    when (optionDump opts) $ do
-        liftIO $ dumpCommits commits (optionDumpOut opts)
+    when (optionElastic opts) $ do
+        liftIO $ mapM_ (submitCommitMetaData (optionElasticUrl opts)) commits
 
     when (optionContrib opts) $ do
         liftIO $ analyseTestContribution commits 
@@ -52,9 +53,9 @@ options :: [OptDescr Flag]
 options =
     [ Option ['p'] ["period"] (ReqArg Period "PERIOD") "Gibt den Zeitraum an, der analysiert werden soll (Git Syntax)"
     , Option ['r'] ["repo"] (ReqArg Repository "REPO") "Das zu analysierende Repository"
-    , Option ['d'] ["dump"] (OptArg DumpCommits "DIR") "Dumpt die commits als JSON in das aktuelle Verzeichnis"
+    , Option ['e'] ["elastic"] (ReqArg ElasticUrlArg "URL") "Überträgt die Commit-Daten zusätzlich an den angegebenen Elastic-Server"
     , Option ['o'] ["ownership"] (NoArg TestOwner) "Ermittelt die Anzahl Tests und deren Eigentümer im aktuellen HEAD"
-    , Option ['c'] ["contribution"] (NoArg TestContrib) "Ermittelt die Beiträge pro Entwickler{Woche, Monat, Jahr} zum Testcode ab Zeitpunkt SINCE (Git Syntax)"
+    , Option ['c'] ["contribution"] (NoArg TestContrib) "Ermittelt die Beiträge pro Entwickler{Woche, Monat, Jahr} zum Testcode für den angegeben Zeitraum (PERIOD)"
     ]
     
 optionOwner :: [Flag] -> Bool
@@ -63,11 +64,11 @@ optionOwner = any (== TestOwner)
 optionContrib :: [Flag] -> Bool
 optionContrib = any (== TestContrib)
 
-optionDump :: [Flag] -> Bool
-optionDump = any dumpOutArgP
+optionElastic :: [Flag] -> Bool
+optionElastic = any elasticUrlArgP
 
-optionDumpOut :: [Flag] -> String
-optionDumpOut = fromJust.dumpOut.fromJust.(L.find dumpOutArgP)
+optionElasticUrl :: [Flag] -> String
+optionElasticUrl = elasticUrlArg.fromJust.(L.find elasticUrlArgP)
 
 optionPeriod :: [Flag] -> String
 optionPeriod = period.fromJust.(L.find periodArgP)
@@ -78,12 +79,12 @@ optionRepo = fromText.repoArg.fromJust.(L.find repoArgP)
 periodArg :: Flag -> String
 periodArg (Period p) = p
 
-dumpOutArgP :: Flag -> Bool
-dumpOutArgP (DumpCommits _) = True
-dumpOutArgP _ = False
+elasticUrlArgP :: Flag -> Bool
+elasticUrlArgP (ElasticUrlArg _) = True
+elasticUrlArgP _ = False
 
-dumpOutArg :: Flag -> String
-dumpOutArg (DumpCommits (Just d)) = d
+elasticUrlArg :: Flag -> ElasticServerUrl
+elasticUrlArg (ElasticUrlArg d) = d
 
 periodArgP :: Flag -> Bool
 periodArgP (Period _) = True

@@ -12,13 +12,13 @@ import System.Environment
 import Data.List as L
 import Data.Text as T (Text, pack)
 
-data Flag = TestOwner | TestContrib | 
+data Flag = TestOwner | TestContrib |
     ElasticUrlArg {
         url :: ElasticServerUrl
     } |
     Period {
         period :: String
-    } | 
+    } |
     Repository {
         repo :: String
     }
@@ -29,12 +29,12 @@ main = shelly $ silently $ do
     opts <- liftIO $ orwellOpts args
 
     commits <- commitInfos (optionPeriod opts) (optionRepo opts)
-    
+
     when (optionElastic opts) $ do
         liftIO $ mapM_ (submitCommitMetaData (optionElasticUrl opts)) commits
 
     when (optionContrib opts) $ do
-        liftIO $ analyseTestContribution commits 
+        liftIO $ analyseTestContribution commits
 
     when (optionOwner opts) $ do
         analyseTestOwnership (optionRepo opts)
@@ -43,7 +43,7 @@ main = shelly $ silently $ do
 Command-Line Options
 -}
 orwellOpts :: [String] -> IO [Flag]
-orwellOpts args = 
+orwellOpts args =
     case getOpt Permute options args of
           (o,[],[]  ) -> return o
           (_,_,errs)  -> ioError (userError (concat errs ++ usageInfo header options))
@@ -57,7 +57,7 @@ options =
     , Option ['o'] ["ownership"] (NoArg TestOwner) "Ermittelt die Anzahl Tests und deren Eigentümer im aktuellen HEAD"
     , Option ['c'] ["contribution"] (NoArg TestContrib) "Ermittelt die Beiträge pro Entwickler{Woche, Monat, Jahr} zum Testcode für den angegeben Zeitraum (PERIOD)"
     ]
-    
+
 optionOwner :: [Flag] -> Bool
 optionOwner = any (== TestOwner)
 
@@ -88,7 +88,7 @@ elasticUrlArg (ElasticUrlArg d) = d
 
 periodArgP :: Flag -> Bool
 periodArgP (Period _) = True
-periodArgP _ = False 
+periodArgP _ = False
 
 repoArg :: Flag -> T.Text
 repoArg (Repository r) = T.pack r
@@ -100,4 +100,3 @@ repoArgP _ = False
 {-
 END Command-Line Options
 -}
-

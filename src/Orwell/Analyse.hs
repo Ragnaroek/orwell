@@ -2,7 +2,7 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
- 
+
 module Orwell.Analyse (
    analyseTestContribution,
    analyseTestOwnership,
@@ -36,7 +36,7 @@ import Orwell.CommitMetaData
 -- TODO Git-Code in eigenes Modul auslagern
 
 dumpCommits :: [CommitMetaData] -> String -> IO ()
-dumpCommits commits outDir = do 
+dumpCommits commits outDir = do
   mapM (\c -> BL.writeFile (outDir ++ "/" ++ (T.unpack (commitHash c)) ++ ".json") (encode c)) commits
   return ()
 
@@ -47,7 +47,7 @@ commitInfos period repositoryDir = do
     mapM extractCommitInfo commits
 
 analyseTestContribution :: [CommitMetaData] -> IO ()
-analyseTestContribution infos = do    
+analyseTestContribution infos = do
     now <- getCurrentUnixDateTime
     let stats = statistics now infos
     -- Ausführlicher Report der letzten Woche
@@ -61,7 +61,7 @@ analyseTestContribution infos = do
 
     intervallReport "aktueller Monat" $ IM.lookup 0 (statMonthly stats)
     intervallReport "letzter Monat" $ IM.lookup 1 (statMonthly stats)
-    
+
     intervallReport "aktuelles Jahr" $ IM.lookup 0 (statYearly stats)
     intervallReport "letztes Jahr" $ IM.lookup 1 (statYearly stats)
 
@@ -86,7 +86,7 @@ detailedReportData (Just m) = do
     printOtherWithoutTest m
     putStrLn ""
     printCommitsWithoutCode m
-    putStrLn ""	
+    putStrLn ""
     putStrLn "DEBUG Alle Commits letzte Woche:"
     mapM_ (printCommits (const True)) (M.assocs m)
 
@@ -112,10 +112,10 @@ analyseTestOwnership :: S.FilePath -> Sh ()
 analyseTestOwnership repositoryDir = do
     cd repositoryDir
     cd "./src/test"
-    
+
     javaTests <- grepTests "*.java"
     groovyTests <- grepTests "*.groovy"
-    
+
     let parsed = map (parseToTestContrib.parseGrepOut) (javaTests ++ groovyTests)
     authored <- mapM gitAddLineAuthor parsed
     liftIO $ putStrLn ""
@@ -134,14 +134,19 @@ incrementTestCount m contrib = M.insert (testContribAuthor contrib) (count + 1) 
 
 gitAddLineAuthor :: TestContribution -> Sh TestContribution
 gitAddLineAuthor contrib = do
-    out <- git ["blame", "-p", "-L", blameLine, T.pack $ testContribFile contrib]
+    out <- git ["blame", "-p", "-L", blameLine, T.pack $ relPath $ testContribFile contrib]
     return $ contrib {
         testContribAuthor = findAuthor out
-    } 
+    }
     where line = T.pack $ show $ testContribLine contrib
           blameLine = (line `T.append` ",") `T.append` line
 
--- TODO Die Struktur sollte TestOwner heißen    
+relPath :: String -> String
+relPath s = if (head s) == '/'
+              then tail s
+              else s
+
+-- TODO Die Struktur sollte TestOwner heißen
 data TestContribution = TestContribution {
     testContribFile :: P.FilePath,
     testContribLine :: Int,
@@ -158,7 +163,7 @@ findAuthor :: [Text] -> Text
 findAuthor = maybe unknownAuthor extractAuthor . L.find (T.isPrefixOf authorPrefix)
 
 extractAuthor :: Text -> Text
-extractAuthor = T.drop (T.length authorPrefix) 
+extractAuthor = T.drop (T.length authorPrefix)
 
 parseGrepOut :: Text -> [B.ByteString]
 parseGrepOut line = fromJust $ match regex (encodeUtf8 line) []
@@ -193,7 +198,7 @@ data CommitType = BUGFIX | FEATURE | OTHER
 
 
 getRelevantCommits :: Text -> Sh [Text]
-getRelevantCommits backInTime = git ["--no-pager", "log", "--no-merges", "--since=" `append` backInTime, "--format=%h"] 
+getRelevantCommits backInTime = git ["--no-pager", "log", "--no-merges", "--since=" `append` backInTime, "--format=%h"]
 
 classify :: CommitMetaData -> CommitType
 classify commit | T.isInfixOf "TEC_" subject = FEATURE
@@ -215,7 +220,7 @@ gitHasParent commit = do
     out <- git ["show", commit, "--format=%P", "--name-only"]
     return $ not $ T.null $ head out
 
-author :: Text -> Sh Text    
+author :: Text -> Sh Text
 author = (flip gitLog) "%an"
 
 testsAdded :: Text -> Sh Int
@@ -224,13 +229,13 @@ testsAdded commit = do
    if hasParent
       then
         countTestsAdded commit
-      else 
-        return 0 
+      else
+        return 0
 
 countTestsAdded :: Text -> Sh Int
 countTestsAdded commit = do
     diff <- gitDiffPrev commit "@Test"
-    return $ L.length $ filterDiffAddedWith "@Test" diff   
+    return $ L.length $ filterDiffAddedWith "@Test" diff
 
 filterDiffAddedWith :: Text -> [Text] -> [Text]
 filterDiffAddedWith str = filter (matchAdded str)
@@ -248,7 +253,7 @@ subject :: Text -> Sh Text
 subject = (flip gitLog) "%s"
 
 files :: Text -> Sh [P.FilePath]
-files commit = do 
+files commit = do
     out <- git ["show", "--pretty=format:", "--name-only", commit]
     return $ map T.unpack out
 
@@ -259,7 +264,7 @@ fileChanges hash = do
       then
         countFileChanges hash
       else
-        return [] 
+        return []
 
 countFileChanges :: Text -> Sh [FileChange]
 countFileChanges hash = do
@@ -288,7 +293,7 @@ extractCommitInfo hash = do
     a <- author hash
     s <- subject hash
     t <- authorDate hash
-    c <- testsAdded hash 
+    c <- testsAdded hash
     changes <- fileChanges hash
     return $ CommitMetaData hash s a (read (T.unpack t)) (codeFiles changes) (testFiles (codeFiles changes)) changes c
 
@@ -343,9 +348,9 @@ monthFromTimestamp :: UnixDateTime -> Int
 monthFromTimestamp = fromEnum._dt_mon.toDateTimeStruct
 
 yearIndex :: UnixDateTime -> UnixDateTime -> Int
-yearIndex time now = yearNow - yearTime 
+yearIndex time now = yearNow - yearTime
     where yearNow = yearFromTimestamp now
-          yearTime = yearFromTimestamp time 
+          yearTime = yearFromTimestamp time
 
 yearFromTimestamp :: UnixDateTime -> Int
 yearFromTimestamp  = fromIntegral.getYear._dt_year.toDateTimeStruct
@@ -353,7 +358,7 @@ yearFromTimestamp  = fromIntegral.getYear._dt_year.toDateTimeStruct
 appendAtIndex :: Int ->  IM.IntMap DevStatMap -> CommitStat -> CommitAuthor -> IM.IntMap DevStatMap
 appendAtIndex i m stat author | value == Nothing = IM.insert i (M.alter (appendStat stat) author M.empty) m
                               | otherwise = IM.insert i (M.alter (appendStat stat) author (fromJust value)) m
-    where value=IM.lookup i m 
+    where value=IM.lookup i m
 
 
 -- TODO Abstraktion für beiden Funktion, sind sehr ähnlich
@@ -375,7 +380,7 @@ sumTestsCommits = foldl (\i s -> i +  (commitTestsAdded (commit s))) 0
 sumTestLinesCommits :: [CommitStat] -> Int
 sumTestLinesCommits = foldl (\i s -> i + (linesTestAdded s)) 0
 
-appendStat :: CommitStat -> Maybe [CommitStat] -> Maybe [CommitStat] 
+appendStat :: CommitStat -> Maybe [CommitStat] -> Maybe [CommitStat]
 appendStat s Nothing = Just [s]
 appendStat s (Just l) = Just $ insert s l
 
@@ -391,9 +396,9 @@ sumCode = sumAdded commitCodeFiles
 sumAdded :: (CommitMetaData -> [FileChange]) -> CommitMetaData -> Int
 sumAdded g c = foldl (\s change-> s + (changeAdded change)) 0 (g c)
 
---- 
+---
 --- Reporting
---- 
+---
 
 maxHashesLineDiagram :: Int
 maxHashesLineDiagram = 50
@@ -449,7 +454,7 @@ printWithoutTestOfType :: CommitType -> DevStatMap -> IO ()
 printWithoutTestOfType t m = do
     putStr $ show t
     putStrLn " ohne Test:"
-    mapM_ (printCommits (filterTypeNoTest t)) (M.assocs m) 
+    mapM_ (printCommits (filterTypeNoTest t)) (M.assocs m)
 
 filterTypeNoTest :: CommitType -> CommitStat -> Bool
 filterTypeNoTest t s = (classify c) == t && (commitTestFiles c) == [] && (commitCodeFiles c) /= []
@@ -458,7 +463,7 @@ filterTypeNoTest t s = (classify c) == t && (commitTestFiles c) == [] && (commit
 printCommitsWithoutCode :: DevStatMap -> IO ()
 printCommitsWithoutCode m = do
     putStrLn "Commits ohne Code:"
-    mapM_ (printCommits filterNoCode) (M.assocs m) 
+    mapM_ (printCommits filterNoCode) (M.assocs m)
 
 filterNoCode :: CommitStat -> Bool
 filterNoCode s = (commitCodeFiles (commit s)) == []
@@ -478,8 +483,8 @@ printRankingCommitsWithTest m = do
     where rankedCommits = rankCommitsWithTest m
 
 maxTestLines :: [CommitStat] -> Int
-maxTestLines = linesTestAdded . head 
-    
+maxTestLines = linesTestAdded . head
+
 rankCommitsWithTest :: DevStatMap -> [CommitStat]
 rankCommitsWithTest m = sortBy compareTestLinesAdded commitsWithTest
     where commitsWithTest = filter filterWithTest $ concat $ M.elems $ m
@@ -500,7 +505,7 @@ printLegendAbsoluteTestLines c = do
     putTxt $ commitSubject $ commit c
 
 compareTestLinesAdded :: CommitStat -> CommitStat -> Ordering
-compareTestLinesAdded a b = compare (linesTestAdded b) (linesTestAdded a) 
+compareTestLinesAdded a b = compare (linesTestAdded b) (linesTestAdded a)
 
 printCommit :: CommitStat -> IO ()
 printCommit c = do
@@ -514,11 +519,10 @@ putTxt :: Text -> IO ()
 putTxt = putStr . T.unpack
 
 {-
-TODO: 
+TODO:
 Ranking Commits (Anteil Testzeilen)
 <commit>          [#############################] xxx %
 <commit>          [#############                ] yyy %
 
 TODO: Anzahl Tests über Scan der @Test-Annotation ermitteln
 -}
-

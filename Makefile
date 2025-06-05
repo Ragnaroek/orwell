@@ -1,5 +1,8 @@
 build:
-	CGO_ENABLED=1 go build -o deckard cmd/main.go
+	CGO_ENABLED=1 go build -o orwell cmd/main.go
+
+install: build
+	mv ./orwell ~/bin/orwell/
 
 run: build
-	./deckard
+	./orwell

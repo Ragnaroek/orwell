@@ -25,7 +25,7 @@ var migrations = [][]string{
 }
 
 func InitDB(config *Config) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", path.Join(config.CodeFolder, "deckard.db"))
+	db, err := sql.Open("sqlite3", path.Join(config.CodeFolder, "orwell.db"))
 	if err != nil {
 		return nil, err
 	}
